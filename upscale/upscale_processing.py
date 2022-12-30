@@ -449,11 +449,11 @@ def process_file(
         stream=sys.stdout,
     )
 
-    if denoise > 30:
-        denoise = 30
-
-    if denoise <= 0:
-        denoise = None
+    if denoise:
+        if > 30:
+            denoise = 30
+        if denoise <= 0:
+            denoise = None
 
     if scale not in [2, 4]:
         ncnn.destroy_gpu_instance()
