@@ -66,10 +66,10 @@ Usage: python upscale_video.py -i infile -f ffmpeg_location
 Usage: test_image.py -i infile
 
   -h                   Show this help
-  -i input_file        Input video file
-  -o output_file       Optional output video file location. Default is input_file + (".2x." or ".4x.")
-  -a anime             Adds additional processing for anime videos to remove grain and color bleeding.
-  -n denoise           Adds additional processing to remove film grain.
+  -i input_file        Input image file
+  -o output_file       Optional output image file location. Default is input_file + (".2x." or ".4x.")
+  -a anime             Adds additional processing for anime images to remove grain and color bleeding.
+  -n denoise           Adds additional processing to remove image grain.
                        Denoise level 1 to 30. 3 = light / 10 = heavy.
   -s scale             2 or 4. Default is 2.
 ```
