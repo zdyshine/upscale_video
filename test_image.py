@@ -255,24 +255,24 @@ def process_image(
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Test Image Upscaler")
-    parser.add_argument("-i", "--input_file", required=True, help="input file.")
+    parser.add_argument("-i", "--input_file", required=True, help="input image file.")
     parser.add_argument(
         "-o",
         "--output_file",
-        help="optional output video file. Default is input_file + ('.2x.' or '.4x.')",
+        help="optional output image file. Default is input_file + ('.2x.' or '.4x.')",
     )
     parser.add_argument(
         "-a",
         "--anime",
         action="store_true",
-        help="Adds additional processing for anime videos to remove grain and color bleeding.",
+        help="Adds additional processing for anime images to remove grain and color bleeding.",
     )
     parser.add_argument(
         "-n",
         "--denoise",
         type=int,
         default=0,
-        help="Adds additional processing to reduce film grain. Denoise level 1 to 30. 3 = light / 10 = heavy.",
+        help="Adds additional processing to reduce image grain. Denoise level 1 to 30. 3 = light / 10 = heavy.",
     )
     parser.add_argument(
         "-s", "--scale", type=int, default=2, help="scale 2 or 4. Default is 2."
