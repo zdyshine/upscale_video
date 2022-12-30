@@ -450,7 +450,7 @@ def process_file(
     )
 
     if denoise:
-        if > 30:
+        if denoise > 30:
             denoise = 30
         if denoise <= 0:
             denoise = None
