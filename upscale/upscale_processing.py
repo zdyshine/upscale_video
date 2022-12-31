@@ -238,7 +238,7 @@ def upscale_image(
     # Load image using opencv
     img = cv2.imread(input_file_name)
 
-    tile_size = 480
+    tile_size = 960
 
     height, width, batch = img.shape
     output_height = height * scale
