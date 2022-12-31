@@ -43,7 +43,7 @@ Usage: python upscale_video.py -i infile -f ffmpeg_location
   -i input_file        Input video file
   -o output_file       Optional output video file location. Default is input_file + (".2x." or ".4x.")
   -f ffmpeg            Location of ffmpeg
-  -e ffmpeg_encoder    fmpeg encoder. Default is av1_qsv.
+  -e ffmpeg_encoder    ffmpeg encoder. Default is av1_qsv.
                        Full list is here https://ffmpeg.org/ffmpeg-codecs.html#Video-Encoders.
   -a anime             Adds additional processing for anime videos to remove grain and color bleeding.
   -n denoise           Adds additional processing to remove film grain.
@@ -63,7 +63,7 @@ Usage: python upscale_video.py -i infile -f ffmpeg_location
 ```
 
 ```console
-Usage: test_image.py -i infile
+Usage: python test_image.py -i infile
 
   -h                   Show this help
   -i input_file        Input image file
