@@ -87,25 +87,67 @@ def get_crop_detect(ffmpeg, input_file, interval_check):
     return None
 
 
-def transpose_tile(tile_output, output):
-    output[
-        tile_output[1] : tile_output[2], tile_output[3] : tile_output[4], :
-    ] = tile_output[0][
-        tile_output[5] : tile_output[6], tile_output[7] : tile_output[8], :
-    ]
+def process_denoise(input_file_name, output_file_name, denoise, remove=True):
+
+    if not os.path.exists(input_file_name):
+        return input_file_name + " not found - skipping denoise"
+
+    img = cv2.UMat(cv2.imread(input_file_name))
+
+    output = cv2.fastNlMeansDenoisingColored(img, None, denoise, 10, 5, 9)
+
+    cv2.imwrite(output_file_name, output)
+
+    if remove:
+        os.remove(input_file_name)
+
+    return "Processed Denoise: " + output_file_name
+
+
+def process_model(input_file, output_file, net, input_name, output_name, remove=True):
+
+    if not os.path.exists(input_file):
+        return
+
+    # Load image using opencv
+    img = cv2.imread(input_file)
+
+    mat_in = ncnn.Mat.from_pixels(
+        img,
+        ncnn.Mat.PixelType.PIXEL_BGR,
+        img.shape[1],
+        img.shape[0],
+    )
+    mean_vals = []
+    norm_vals = [1 / 255.0, 1 / 255.0, 1 / 255.0]
+    mat_in.substract_mean_normalize(mean_vals, norm_vals)
+
+    # Try/except block to catch out-of-memory error
+    try:
+        # Make sure the input and output names match the param file
+        ex = net.create_extractor()
+        ex.input(input_name, mat_in)
+        ret, mat_out = ex.extract(output_name)
+        out = np.array(mat_out)
+
+        # Transpose the output from `c, h, w` to `h, w, c` and put it back in 0-255 range
+        output = out.transpose(1, 2, 0) * 255
+
+        # Save image using opencv
+        cv2.imwrite(output_file_name, output)
+    except RuntimeError as error:
+        logging.error(error)
+        ncnn.destroy_gpu_instance()
+        sys.exit("processing failed")
+
+    if remove:
+        os.remove(input_file_name)
+
+    logging.info("Processed Model: " + output_file_name)
 
 
 def process_tile(
-    net,
-    img,
-    input_name,
-    output_name,
-    tile_size,
-    scale,
-    y,
-    x,
-    height,
-    width,
+    net, img, input_name, output_name, tile_size, scale, y, x, height, width, output
 ):
     # extract tile from input image
     ofs_y = y * tile_size
@@ -144,8 +186,7 @@ def process_tile(
         input_start_y + b_start_y : input_end_y + b_end_y,
         input_start_x + b_start_x : input_end_x + b_end_x,
         :,
-    ]
-    input_tile = input_tile.copy()
+    ].copy()
 
     # Convert image to ncnn Mat
 
@@ -182,83 +223,53 @@ def process_tile(
     b_start_x = b_start_x * scale
     input_end_x = input_end_x * scale
 
-    # put tile into output image
-    return (
-        output_tile,
-        input_start_y,
-        input_end_y,
-        input_start_x,
-        input_end_x,
-        -1 * b_start_y,
-        input_end_y - input_start_y - b_start_y,
-        -1 * b_start_x,
-        input_end_x - input_start_x - b_start_x,
-    )
+    ## transpose time
+    output[input_start_y:input_end_y, input_start_x:input_end_x, :] = output_tile[
+        -1 * b_start_y : input_end_y - input_start_y - b_start_y,
+        -1 * b_start_x : input_end_x - input_start_x - b_start_x,
+        :,
+    ]
 
 
-def process_denoise(frame, denoise, input_model_name):
-    img_file = str(frame + 1) + "." + input_model_name + ".png"
-
-    if not os.path.exists(img_file):
-        return img_file + " not found - skipping denoise"
-
-    img = cv2.UMat(cv2.imread(img_file))
-
-    output = cv2.fastNlMeansDenoisingColored(img, None, denoise, 10, 5, 9)
-
-    cv2.imwrite(str(frame + 1) + ".denoise.png", output)
-
-    os.remove(img_file)
-
-    return "Processed Frame: denoise " + str(frame)
-
-
-def process_model(
-    frame,
-    input_model_name,
-    output_model_name,
-    net,
-    input_name,
-    output_name,
+def upscale_image(
+    input_file_name, output_file_name, scale, net, input_name, output_name
 ):
 
-    if not os.path.exists(str(frame) + "." + input_model_name + ".png"):
-        return
-
     # Load image using opencv
-    img = cv2.imread(str(frame) + "." + input_model_name + ".png")
+    img = cv2.imread(input_file_name)
 
-    mat_in = ncnn.Mat.from_pixels(
-        img,
-        ncnn.Mat.PixelType.PIXEL_BGR,
-        img.shape[1],
-        img.shape[0],
-    )
-    mean_vals = []
-    norm_vals = [1 / 255.0, 1 / 255.0, 1 / 255.0]
-    mat_in.substract_mean_normalize(mean_vals, norm_vals)
+    tile_size = 480
 
-    # Try/except block to catch out-of-memory error
-    try:
-        # Make sure the input and output names match the param file
-        ex = net.create_extractor()
-        ex.input(input_name, mat_in)
-        ret, mat_out = ex.extract(output_name)
-        out = np.array(mat_out)
+    height, width, batch = img.shape
+    output_height = height * scale
+    output_width = width * scale
+    output_shape = (output_height, output_width, batch)
 
-        # Transpose the output from `c, h, w` to `h, w, c` and put it back in 0-255 range
-        output = out.transpose(1, 2, 0) * 255
+    # start with black image
+    output = np.zeros(output_shape)
 
-        # Save image using opencv
-        cv2.imwrite(str(frame) + "." + output_model_name + ".png", output)
-    except RuntimeError as error:
-        logging.error(error)
-        ncnn.destroy_gpu_instance()
-        sys.exit("processing failed")
+    tiles_x = math.ceil(width / tile_size)
+    tiles_y = math.ceil(height / tile_size)
+    for y in range(tiles_y):
+        for x in range(tiles_x):
+            tile_idx = y * tiles_x + x + 1
+            logging.debug(f"\tProcessing Tile: {tile_idx}/{tiles_x * tiles_y}")
 
-    os.remove(str(frame) + "." + input_model_name + ".png")
+            process_tile(
+                net,
+                img,
+                input_name,
+                output_name,
+                tile_size,
+                scale,
+                y,
+                x,
+                height,
+                width,
+                output,
+            )
 
-    logging.info("Processed Frame: " + output_model_name + " " + str(frame))
+    cv2.imwrite(output_file_name, output)
 
 
 def upscale_frames(
@@ -290,49 +301,21 @@ def upscale_frames(
     ## upscale frames
     for frame in range(start_frame, end_frame + 1):
 
-        if os.path.exists(str(frame) + ".png"):
+        output_file_name = str(frame) + ".png"
+        input_file_name = str(frame) + "." + input_model_name + ".png"
+
+        if os.path.exists(output_file_name):
             frames_upscaled += 1
             continue
 
-        # Load image using opencv
-        img = cv2.imread(str(frame) + "." + input_model_name + ".png")
+        upscale_image(
+            input_file_name, output_file_name, scale, net, input_name, output_name
+        )
 
-        tile_size = 480
-
-        height, width, batch = img.shape
-        output_height = height * scale
-        output_width = width * scale
-        output_shape = (output_height, output_width, batch)
-
-        # start with black image
-        output = np.zeros(output_shape)
-
-        tiles_x = math.ceil(width / tile_size)
-        tiles_y = math.ceil(height / tile_size)
-        for y in range(tiles_y):
-            for x in range(tiles_x):
-                tile_idx = y * tiles_x + x + 1
-                logging.debug(f"\tProcessing Tile: {tile_idx}/{tiles_x * tiles_y}")
-
-                output_tile = process_tile(
-                    net,
-                    img,
-                    input_name,
-                    output_name,
-                    tile_size,
-                    scale,
-                    y,
-                    x,
-                    height,
-                    width,
-                )
-                transpose_tile(output_tile, output)
-
-        cv2.imwrite(str(frame) + ".png", output)
-
-        os.remove(str(frame) + "." + input_model_name + ".png")
+        os.remove(input_file_name)
 
         frames_upscaled += 1
+
         logging.info(
             "Processing Batch: "
             + str(frame_batch)
@@ -522,7 +505,7 @@ def process_file(
     cmds.append("%d.extract.png")
 
     ## Extract frames to temp dir. Need 300 gigs for a 2 hour movie
-    logging.info("Starting Frame Extracting..")
+    logging.info("Starting Frames Extraction..")
 
     if (
         not os.path.exists(str(frames_count) + ".extract.png")
@@ -533,7 +516,7 @@ def process_file(
 
     if extract_only:
         ncnn.destroy_gpu_instance()
-        sys.exit("Extract Only - Frame Extracting Completed")
+        sys.exit("Extract Only - Frames Extraction Completed")
 
     input_model_name = "extract"
 
@@ -546,9 +529,8 @@ def process_file(
 
         for frame in range(frames_count):
             process_model(
-                frame + 1,
-                input_model_name,
-                "anime",
+                str(frame + 1) + "." + input_model_name + ".png",
+                str(frame + 1) + ".anime.png",
                 net,
                 input_name,
                 output_name,
@@ -561,7 +543,15 @@ def process_file(
         pool = Pool()
 
         for frame in range(frames_count):
-            pool.apply_async(process_denoise, args=(frame, denoise, input_model_name), callback=logging.info)
+            pool.apply_async(
+                process_denoise,
+                args=(
+                    str(frame + 1) + "." + input_model_name + ".png",
+                    str(frame + 1) + ".denoise.png",
+                    denoise,
+                ),
+                callback=logging.info,
+            )
 
         pool.close()
         pool.join()
