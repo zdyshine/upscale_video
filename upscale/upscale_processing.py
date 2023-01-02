@@ -63,7 +63,6 @@ def get_crop_detect(ffmpeg, input_file, interval_check):
                 "null",
                 "-",
             ],
-            shell=True,
             capture_output=True,
             text=True,
         )
